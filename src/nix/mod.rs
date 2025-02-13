@@ -117,6 +117,9 @@ pub struct NixFlags {
 
     /// Options to pass as --option name value.
     options: HashMap<String, String>,
+
+    /// Flags directly pass to nix
+    extra_flags: Vec<String>,
 }
 
 impl NodeName {
@@ -216,6 +219,10 @@ impl NixFlags {
         self.options = options;
     }
 
+    pub fn set_flags(&mut self, flags: Vec<String>) {
+        self.extra_flags = flags;
+    }
+
     pub fn to_args(&self) -> Vec<String> {
         let mut args = Vec::new();
 
@@ -244,6 +251,8 @@ impl NixFlags {
             args.push(name.to_string());
             args.push(value.to_string());
         }
+
+        args.extend(self.extra_flags.iter().cloned());
 
         args
     }

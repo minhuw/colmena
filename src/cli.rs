@@ -139,6 +139,18 @@ This only works when building locally.
     nix_option: Vec<String>,
     #[arg(
         long,
+        allow_hyphen_values = true,
+        action = clap::ArgAction::Append,
+        help = "Extra flags directly pass to nix",
+        long_help = r#"Passes arbitrary flags to Nix commands
+
+This only works when building locally.
+"#,
+        global = true,
+    )]
+    extra_nix_flag: Vec<String>,
+    #[arg(
+        long,
         default_value_t,
         help = "Use direct flake evaluation (experimental)",
         long_help = r#"If enabled, flakes will be evaluated using `nix eval`. This requires the flake to depend on Colmena as an input and expose a compatible `colmenaHive` output:
@@ -288,6 +300,14 @@ async fn get_hive(opts: &Opts) -> ColmenaResult<Hive> {
         };
         hive.add_nix_option(name.clone(), value.clone());
     }
+
+    hive.add_nix_flags(
+        opts.extra_nix_flag
+            .iter()
+            .flat_map(|flag| flag.split_whitespace())
+            .map(String::from)
+            .collect(),
+    );
 
     Ok(hive)
 }

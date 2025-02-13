@@ -124,6 +124,9 @@ pub struct Hive {
     /// Options to pass as --option name value.
     nix_options: HashMap<String, String>,
 
+    /// flags to pass to nix command
+    extra_nix_flags: Vec<String>,
+
     meta_config: OnceCell<MetaConfig>,
 }
 
@@ -178,6 +181,7 @@ impl Hive {
             show_trace: false,
             impure: false,
             nix_options: HashMap::new(),
+            extra_nix_flags: Vec::new(),
             meta_config: OnceCell::new(),
         })
     }
@@ -217,6 +221,10 @@ impl Hive {
         self.nix_options.insert(name, value);
     }
 
+    pub fn add_nix_flags(&mut self, args: Vec<String>) {
+        self.extra_nix_flags.extend(args);
+    }
+
     /// Returns Nix options to set for this Hive.
     pub fn nix_flags(&self) -> NixFlags {
         let mut flags = NixFlags::default();
@@ -224,6 +232,7 @@ impl Hive {
         flags.set_pure_eval(self.path.is_flake());
         flags.set_impure(self.impure);
         flags.set_options(self.nix_options.clone());
+        flags.set_flags(self.extra_nix_flags.clone());
         flags
     }
 
