@@ -5,6 +5,7 @@ mod tests;
 
 use std::collections::HashMap;
 use std::convert::AsRef;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -96,6 +97,14 @@ pub enum EvaluationMethod {
     /// In this method, we can no longer pull in our bundled assets and
     /// the flake must expose a compatible `colmenaHive` output.
     DirectFlakeEval,
+
+    /// Use `nix eval --apply` on top of a flake.
+    ///
+    /// This can be activated with --experimental-flake-eval and --experimental-host-config
+    ///
+    /// In this method, the flake expose a compatible `colmenaHive` output
+    /// that's a function accepting arbitrary configurations specified with --node-config
+    DirectFlakeLambdaEval,
 }
 
 #[derive(Debug)]
@@ -123,6 +132,9 @@ pub struct Hive {
 
     /// Options to pass as --option name value.
     nix_options: HashMap<String, String>,
+
+    /// Options pass to Hive
+    hive_config: Option<PathBuf>,
 
     meta_config: OnceCell<MetaConfig>,
 }
@@ -177,6 +189,7 @@ impl Hive {
             assets,
             show_trace: false,
             impure: false,
+            hive_config: None,
             nix_options: HashMap::new(),
             meta_config: OnceCell::new(),
         })
@@ -215,6 +228,10 @@ impl Hive {
 
     pub fn add_nix_option(&mut self, name: String, value: String) {
         self.nix_options.insert(name, value);
+    }
+
+    pub fn set_hive_config(&mut self, config: PathBuf) {
+        self.hive_config = Some(config);
     }
 
     /// Returns Nix options to set for this Hive.
@@ -471,6 +488,17 @@ impl Hive {
         match self.evaluation_method {
             EvaluationMethod::NixInstantiate => self.assets.get_base_expression(),
             EvaluationMethod::DirectFlakeEval => FLAKE_APPLY_SNIPPET.to_string(),
+            EvaluationMethod::DirectFlakeLambdaEval => {
+                format!(r#"with builtins; hive_func:
+    let
+        hive = hive_func {{ hive-config = builtins.fromJSON "{}"; }};
+    in
+     assert (hive.__schema == "{}" || throw ''
+    The colmenaHive output (schema ${{hive.__schema}}) isn't compatible with this version of Colmena.
+
+    Hint: Use the same version of Colmena as in the Flake input.
+''); "#, (fs::read_to_string(self.hive_config.as_ref().unwrap()).unwrap().replace("\"", "\\\"")), HIVE_SCHEMA).to_string()
+            }
         }
     }
 
@@ -534,7 +562,7 @@ impl<'hive> NixInstantiate<'hive> {
 
                 command
             }
-            EvaluationMethod::DirectFlakeEval => {
+            EvaluationMethod::DirectFlakeEval | EvaluationMethod::DirectFlakeLambdaEval => {
                 let mut command = Command::new("nix");
                 let flake = if let HivePath::Flake(flake) = self.hive.path() {
                     flake
