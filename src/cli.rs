@@ -1,7 +1,7 @@
 //! Global CLI Setup.
 
-use std::env;
 use std::io;
+use std::{env, path::PathBuf};
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
@@ -162,6 +162,22 @@ struct Opts {
     /// <https://bixense.com/clicolors>.
     #[arg(
         long,
+        help = "Use direct flake evaluation with lambda func(experimental)",
+        long_help = r#"If enabled, flakes will be evaluated using `nix eval`. This requires the flake to depend on Colmena as an input and expose a compatible `colmenaHive` lambda output:
+
+  outputs = { self, colmena, ... }: {
+    colmenaHive = { hive-config }: colmena.lib.makeHive self.outputs.colmena { inherit hive-config; };
+    colmena = { hive-config }: {
+        ...
+    };
+  };
+
+This is an experimental feature."#,
+        global = true
+    )]
+    hive_config: Option<PathBuf>,
+    #[arg(
+        long,
         value_name = "WHEN",
         default_value_t,
         global = true,
@@ -301,6 +317,11 @@ async fn get_hive(opts: &Opts) -> ColmenaResult<Hive> {
 "#
         );
         hive.set_evaluation_method(EvaluationMethod::NixInstantiate);
+    }
+
+    if let Some(config) = &opts.hive_config {
+        hive.set_evaluation_method(EvaluationMethod::DirectFlakeLambdaEval);
+        hive.set_hive_config(config.clone());
     }
 
     for chunks in opts.nix_option.chunks_exact(2) {
